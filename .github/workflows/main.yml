@@ -77,23 +77,20 @@ jobs:
           
       - name: Build repo
         run: echo "Building..."
-  deploy:
-    name: Deploy
+
+  approval:
+    name: Approval
     needs: [build]
     runs-on: ubuntu-latest
-    environment: deploy-gates-demo
+    environment:
+      name: deploy-gates-demo
+      url: https://example.com/health
+    outputs:
+      change-request-number: ${{ steps.create.outputs.change-request-number }}
+      change-request-sys-id: ${{ steps.create.outputs.change-request-sys-id }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: v1.x
-          
-      - name: Deploy to prod
-        run: echo "Deploying..."
-
+      - name: Awaiting approval before deployment
+        run: echo "Awaiting approval before deployment..."
       - name: ServiceNow Change
         continue-on-error: true
         uses: ServiceNow/servicenow-devops-change@v6.1.0
@@ -111,9 +108,26 @@ jobs:
           changeCreationTimeOut: '3600'
           abortOnChangeCreationFailure: true
           abortOnChangeStepTimeout: true
+
+  deploy:
+    name: Deploy
+    needs: [build, approval]
+    runs-on: ubuntu-latest
+    environment: deploy-gates-demo
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+          
+      - name: Deploy to prod
+        run: echo "Deploying..."
           
       - name: Output of Change Creation
-        run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }} and change-request-sys-id = ${{ steps.create.outputs.change-request-sys-id }} " >> $GITHUB_OUTPUT
+        run: echo "change-request-number = ${{ needs.approval.outputs.change-request-number }} and change-request-sys-id = ${{ needs.approval.outputs.change-request-sys-id }} " >> $GITHUB_OUTPUT
 
       - name: ServiceNow Update Change
         continue-on-error: true
@@ -123,10 +137,9 @@ jobs:
           tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID }}
           instance-url: ${{ secrets.SN_INSTANCE_URL }}
           context-github: ${{ toJSON(github) }}
-          change-request-number: '${{ steps.create.outputs.change-request-number }}'
+          change-request-number: '${{ needs.approval.outputs.change-request-number }}'
           change-request-details: '{"short_description":"Hello from CICD Pipeline","description":"Automated Software Deployment.","assignment_group":"a715cd759f2002002920bde8132e7018","implementation_plan":"Software update is tested and results can be found in Test Summaries Tab; When the change is approved the implementation happens automated by the CICD pipeline within the change planned start and end time window.","backout_plan":"When software fails in production, the previous software release will be re-deployed.","test_plan":"Testing if the software was successfully deployed"}'
       
       - name: Output of Change Creation
-        run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}" >> $GITHUB_OUTPUT
+        run: echo "change-request-number = ${{ needs.approval.outputs.change-request-number }}" >> $GITHUB_OUTPUT
 
-        
